@@ -2,6 +2,7 @@
 using System.Windows.Forms;
 using Opus.Solution;
 using static System.FormattableString;
+using System.Drawing;
 
 namespace Opus.UI.Rendering
 {
@@ -68,11 +69,15 @@ namespace Opus.UI.Rendering
             var objects = Solution.GetObjects<Track>();
             foreach (var obj in objects)
             {
+                // To minimize scrollling, first try to get as much as possible of the path visible
+                Screen.Grid.EnsureCellsVisible(obj.GetBounds());
+
                 var pos = obj.GetWorldPosition();
                 Screen.Grid.EnsureCellVisible(pos);
 
                 var toolLocation = Sidebar.ScrollTo(Sidebar.Mechanisms, Sidebar.Mechanisms[obj.Type]);
                 var gridLocation = Screen.Grid.GetScreenLocationForCell(pos);
+
                 MouseUtils.LeftDrag(toolLocation, gridLocation);
 
                 RenderTrackPath(obj);
@@ -84,22 +89,43 @@ namespace Opus.UI.Rendering
             var trackPos = track.GetWorldPosition();
             sm_log.Info(Invariant($"Rendering track at {trackPos}"));
 
-            // To minimize scrollling, first try to get as much as possible of the path visible
-            Screen.Grid.EnsureCellsVisible(track.GetBounds());
-
+            var position = trackPos.Add(track.Path.Skip(1).First());
             var prevPosition = trackPos;
-            foreach (var offset in track.Path.Skip(1))
-            {
-                var position = trackPos.Add(offset);
-                Screen.Grid.EnsureCellVisible(position, scrollToCenter: true); // scroll to center to minimise number of scrolls if it's a long track
+            Screen.Grid.EnsureCellVisible(position, scrollToCenter: true); // scroll to center to minimise number of scrolls if it's a long track
 
-                // We need to recalculate both locations because the grid may have scrolled
-                var location = Screen.Grid.GetScreenLocationForCell(position);
-                var prevLocation = Screen.Grid.GetScreenLocationForCell(prevPosition);
-                MouseUtils.LeftDrag(prevLocation, location);
+            Point location = Screen.Grid.GetScreenLocationForCell(trackPos.Add(track.Path.Skip(1).First()));
+            Point prevLocation = Screen.Grid.GetScreenLocationForCell(prevPosition);
+            Rectangle checkRect;
+
+            MouseUtils.LeftDrag(prevLocation, location, keepMouseDown: true);
+
+            prevPosition = position;
+
+            foreach (var offset in track.Path.Skip(2))
+            {
+                position = trackPos.Add(offset);
+                var scrollCheck = Screen.Grid.CheckCellsVisible(position, out checkRect, scrollToCenter: true); // scroll to center to minimise number of scrolls if it's a long track
+
+                if (scrollCheck)
+                {
+                    // Release mouse and then scroll;
+                    MouseUtils.LeftUp();
+                    Screen.Grid.ApplyCellsVisible(checkRect, scrollToCenter: true);
+                    // We need to recalculate both locations because the grid has scrolled
+                    prevLocation = Screen.Grid.GetScreenLocationForCell(prevPosition);
+                }
+                else
+                {
+                    prevLocation = location;
+                }
+                location = Screen.Grid.GetScreenLocationForCell(position);
+                MouseUtils.LeftDrag(prevLocation, location, keepMouseDown: true);
 
                 prevPosition = position;
             }
+
+            // Release the mouse when done.
+            MouseUtils.LeftUp();
         }
 
         private void RenderArms()

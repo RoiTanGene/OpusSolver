@@ -137,6 +137,50 @@ namespace Opus.UI
         }
 
         /// <summary>
+        /// Checks if scrolling the grid if necessary so that the cells in the coordinates given by bounds
+        /// are completely visible.
+        /// </summary>
+        public bool CheckCellsVisible(Vector2 position, out Rectangle scrollTargetRect, bool scrollToCenter = false)
+        {
+            return CheckCellsVisible(new Bounds(position, position), out scrollTargetRect, scrollToCenter);
+        }
+
+        /// <summary>
+        /// Checks if scrolling the grid if necessary so that the cells in the coordinates given by bounds
+        /// are completely visible.
+        /// </summary>
+        public bool CheckCellsVisible(Bounds bounds, out Rectangle scrollTargetRect, bool scrollToCenter = false)
+        {
+            var bottomLeft = GetCellLocationLocal(bounds.Min);
+            var topRight = GetCellLocationLocal(bounds.Max.Add(new Vector2(0, 1))); // Add (0, 1) so we avoid the exit button in the top-right corner of the screen
+            scrollTargetRect = new Rectangle(bottomLeft.X - HexWidth / 2, topRight.Y - HexHeight / 2,
+                topRight.X - bottomLeft.X + HexWidth, bottomLeft.Y - topRight.Y + HexHeight);
+            if (scrollToCenter)
+            {
+                return m_area.CheckScrollToCenterIfNecessary(scrollTargetRect);
+            }
+            else
+            {
+                return m_area.CheckScrollMinimalIfNecessary(scrollTargetRect);
+            }
+        }
+
+        /// <summary>
+        /// Applies scrolling to a specific rect.
+        /// </summary>
+        public void ApplyCellsVisible(Rectangle rect, bool scrollToCenter = false)
+        {
+            if (scrollToCenter)
+            {
+                m_area.ScrollToCenterIfNecessary(rect);
+            }
+            else
+            {
+                m_area.ScrollMinimalIfNecessary(rect);
+            }
+        }
+
+        /// <summary>
         /// Scrolls the grid so that the center of the cell at the specified coordinates is in the middle of the grid.
         /// </summary>
         public void ScrollTo(Vector2 position)

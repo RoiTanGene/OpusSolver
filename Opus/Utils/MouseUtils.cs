@@ -24,6 +24,8 @@ namespace Opus
     {
         private static readonly log4net.ILog sm_log = log4net.LogManager.GetLogger(typeof(MouseUtils));
 
+        static MouseEvent currentEvent;
+
         public static int GlobalDragDelay { get; set; } = 0;
 
         static MouseUtils()
@@ -53,6 +55,7 @@ namespace Opus
 
         public static void SendMouseEvent(MouseEvent flags)
         {
+            currentEvent = flags;
             var point = GetCursorPosition();
             NativeMethods.mouse_event((int)flags, point.X, point.Y, 0, IntPtr.Zero);
         }
@@ -74,6 +77,25 @@ namespace Opus
             Drag(MouseEvent.RightDown, MouseEvent.RightUp, start, end, delay, keepMouseDown);
         }
 
+        public static void LeftUp(int delay = 0)
+        {
+            if (currentEvent != MouseEvent.LeftUp)
+            {
+                int delayAfterMouse = GlobalDragDelay + delay + 50;
+                ThreadUtils.SleepOrAbort(delayAfterMouse);
+                SendMouseEvent(MouseEvent.LeftUp);
+            }
+        }
+        public static void LeftDown(int delay = 0)
+        {
+            if (currentEvent != MouseEvent.LeftDown)
+            {
+                int delayAfterMouse = GlobalDragDelay + delay + 50;
+                ThreadUtils.SleepOrAbort(delayAfterMouse);
+                SendMouseEvent(MouseEvent.LeftDown);
+            }
+        }
+
         public static void Drag(MouseEvent startFlags, MouseEvent endFlags, Point start, Point end, int delay = 0, bool keepMouseDown = false)
         {
             sm_log.Info(Invariant($"Dragging from {start} to {end}; startFlags: {startFlags}; endFlags: {endFlags}"));
@@ -84,13 +106,16 @@ namespace Opus
             SetCursorPosition(start);
             ThreadUtils.SleepOrAbort(delayAfterMove);
 
-            SendMouseEvent(startFlags);
-            ThreadUtils.SleepOrAbort(delayAfterMouse);
+            if (startFlags != currentEvent)
+            {
+                SendMouseEvent(startFlags);
+                ThreadUtils.SleepOrAbort(delayAfterMouse);
+            }
 
             SetCursorPosition(end);
             ThreadUtils.SleepOrAbort(delayAfterMove);
 
-            if (!keepMouseDown)
+            if (!keepMouseDown && endFlags != currentEvent)
             {
                 SendMouseEvent(endFlags);
                 ThreadUtils.SleepOrAbort(delayAfterMouse);

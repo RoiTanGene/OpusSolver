@@ -157,6 +157,52 @@ namespace Opus.UI
         }
 
         /// <summary>
+        /// Checks if scrolling is necessary so that the target rectangle is completely visible on the screen.
+        /// Doesn't scroll unnecessarily in one direction if it's not required.
+        /// </summary>
+        public bool CheckScrollToCenterIfNecessary(Rectangle targetRect)
+        {
+            if (targetRect.Left < m_scrollPosition.X || targetRect.Right > m_scrollPosition.X + Rect.Width)
+            {
+                return true;
+            }
+
+            if (targetRect.Top < m_scrollPosition.Y || targetRect.Bottom > m_scrollPosition.Y + Rect.Height)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks if scrolling is necessary so that the target rectangle is completely visible on the screen.
+        /// Doesn't scroll unnecessarily in one direction if it's not required.
+        /// </summary>
+        public bool CheckScrollMinimalIfNecessary(Rectangle targetRect)
+        {
+            if (targetRect.Left < m_scrollPosition.X)
+            {
+                return true;
+            }
+            else if (targetRect.Right > m_scrollPosition.X + Rect.Width)
+            {
+                return true;
+            }
+
+            if (targetRect.Top < m_scrollPosition.Y)
+            {
+                return true;
+            }
+            else if (targetRect.Bottom > m_scrollPosition.Y + Rect.Height)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Scrolls the area by the specified amount (relative to the current scroll position).
         /// </summary>
         public void ScrollBy(Point targetDelta)
@@ -178,6 +224,11 @@ namespace Opus.UI
             }
 
             var delta = targetLocation.Subtract(m_scrollPosition);
+            if (delta == new Point(0, 0))
+            {
+                return;
+            }
+
             if (VerticalCheckRect.HasValue)
             {
                 // Scroll X and Y separately to reduce chances of errors
@@ -189,6 +240,11 @@ namespace Opus.UI
                 InternalScrollBy(delta);
             }
         }
+
+        /// <summary>
+        /// Checks if scrolling is neccecary.
+        /// </summary>
+        public bool ScrollCheck(Point targetLocation) => targetLocation.Subtract(m_scrollPosition) == new Point(0, 0);
 
         /// <summary>
         /// Scrolls the area by the specified amount (relative to the current scroll position).
