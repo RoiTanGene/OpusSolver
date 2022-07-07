@@ -20,6 +20,9 @@ namespace Opus.UI.Rendering
         private InstructionRenderer m_instructionRenderer;
         private int m_renderDelay = 10;
 
+        private List<Instruction> lastCopy;
+        private bool lastRowErrored = false;
+
         public ProgramRenderer(ProgramGrid grid, Program program, IEnumerable<Arm> arms)
         {
             m_grid = grid;
@@ -62,6 +65,8 @@ namespace Opus.UI.Rendering
             sm_log.Info(Invariant($"Rendering arm {armIndex} from {startTime} to {endTime}"));
             m_grid.EnsureCellVisible(new Vector2(startTime, armIndex));
 
+            int chainCopy = 0;
+
             for (int timeIndex = startTime; timeIndex <= endTime; timeIndex++)
             {
                 if (!instructions[timeIndex].IsRenderable())
@@ -71,33 +76,41 @@ namespace Opus.UI.Rendering
 
                 // It's quite common for an arm to have similar instructions to the previous arm, so
                 // try to copy them if possible. 
-                int numToCopy = FindCopyableInstructions(timeIndex, endTime, armIndex);
+                int numToCopy = FindCopyableInstructions(timeIndex, endTime, armIndex, out var copyList);
 
                 // Don't bother for single instructions as it's quicker to just recreate them
                 if (numToCopy > 1)
                 {
                     m_grid.EnsureCellsVisible(new Vector2(startTime, armIndex - 1), new Vector2(numToCopy, 2));
-                    CopyInstructionsFromPrevious(timeIndex, numToCopy, armIndex);
+                    CopyInstructionsFromPrevious(timeIndex, numToCopy, armIndex, out chainCopy, copyList);
+
+                    if (chainCopy > 0)
+                    {
+                        chainCopy = numToCopy;
+                    }
                     timeIndex += numToCopy - 1;
                 }
                 else
                 {
+                    lastCopy = null;
                     m_instructionRenderer.Render(new Vector2(timeIndex, armIndex), instructions[timeIndex], m_renderDelay);
                 }
             }
 
-            EnsureRowCorrect(startTime, endTime, armIndex, instructions);
+            EnsureRowCorrect(startTime, endTime, armIndex, instructions, chainCopy);
         }
 
         /// <summary>
         /// Finds the number of instructions that are the same between the specified arm and the
         /// previous arm, starting at startTime.
         /// </summary>
-        private int FindCopyableInstructions(int startTime, int endTime, int armIndex)
+        private int FindCopyableInstructions(int startTime, int endTime, int armIndex, out List<Instruction> copyList)
         {
+            copyList = null;
+            int result = 0;
             if (armIndex == 0)
             {
-                return 0;
+                return result;
             }
 
             var instructions = m_program.GetArmInstructions(m_arms[armIndex]);
@@ -119,24 +132,39 @@ namespace Opus.UI.Rendering
                 int lastRenderable = instructions.FindLastIndex(lastSame, lastSame - startTime + 1, i => i.IsRenderable());
                 if (lastRenderable < 0)
                 {
-                    return 0;
+                    return result;
                 }
                 else
                 {
-                    return lastRenderable - startTime + 1;
+                    result = lastRenderable - startTime + 1;
+                    copyList = instructions.GetRange(startTime, result);
+                    return result;
                 }
             }
 
-            return lastSame - startTime + 1;
+            result = lastSame - startTime + 1;
+            copyList = instructions.GetRange(startTime, result);
+            return result;
         }
 
-        private void CopyInstructionsFromPrevious(int timeIndex, int width, int armIndex)
+        private void CopyInstructionsFromPrevious(int timeIndex, int width, int armIndex, out int chainCopy, List<Instruction> copyList = null)
         {
+            chainCopy = 0;
+
             // Select the instructions to copy
             var sourcePos = new Vector2(timeIndex, armIndex - 1);
-            var dragStart = m_grid.GetCellLocation(new Vector2(timeIndex + width - 1, armIndex));
             var dragEnd = m_grid.GetCellLocation(sourcePos);
-            MouseUtils.LeftDrag(dragStart, dragEnd);
+
+            if (lastCopy == null || copyList == null || !copyList.SequenceEqual(lastCopy))
+            {
+                var dragStart = m_grid.GetCellLocation(new Vector2(timeIndex + width - 1, armIndex));
+                MouseUtils.LeftDrag(dragStart, dragEnd);
+                lastCopy = copyList;
+            }
+            else
+            {
+                chainCopy = 1;
+            }
 
             // Copy them
             KeyDown(Keys.ControlKey);
@@ -148,7 +176,7 @@ namespace Opus.UI.Rendering
             ThreadUtils.SleepOrAbort(m_renderDelay);
         }
 
-        private void EnsureRowCorrect(int startTime, int endTime, int armIndex, List<Instruction> instructions)
+        private void EnsureRowCorrect(int startTime, int endTime, int armIndex, List<Instruction> instructions, int chainCopy = 0)
         {
             const int maxRetries = 5;
             int retryCount = 0;
@@ -157,10 +185,16 @@ namespace Opus.UI.Rendering
             var errors = FindErrors(startTime, endTime, armIndex, instructions);
             while (errors.Any())
             {
+                lastCopy = null;
+                if (lastRowErrored)
+                {
+                    retryCount = 1;
+                }
+
                 if (prevErrors.HasValue && errors.Count() < prevErrors.Value)
                 {
                     // The number of errors has decreased, so reset the retry count
-                    retryCount = 0;
+                    retryCount = 1;
                 }
                 else
                 {
@@ -182,10 +216,22 @@ namespace Opus.UI.Rendering
                 foreach (int timeIndex in errors)
                 {
                     sm_log.Info(Invariant($"Re-rendering instruction for arm {armIndex} at time {timeIndex}"));
-                    m_instructionRenderer.Render(new Vector2(timeIndex, armIndex), instructions[timeIndex], m_renderDelay);
+                    if (chainCopy > 0)
+                    {
+                        m_grid.EnsureCellsVisible(new Vector2(startTime, armIndex - 1), new Vector2(chainCopy, 2));
+                        CopyInstructionsFromPrevious(timeIndex, chainCopy, armIndex, out chainCopy);
+                    }
+                    else
+                    {
+                        m_instructionRenderer.Render(new Vector2(timeIndex, armIndex), instructions[timeIndex], m_renderDelay);
+                    }
                 }
 
                 errors = FindErrors(startTime, endTime, armIndex, instructions);
+            }
+            if (retryCount == 0)
+            {
+                lastRowErrored = false;
             }
         }
 
