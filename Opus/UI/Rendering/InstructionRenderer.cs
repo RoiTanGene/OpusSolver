@@ -25,6 +25,8 @@ namespace Opus.UI.Rendering
             { Instruction.Repeat,                   Keys.V }
         };
 
+        public static bool QuickHotkeysEnabled { get; set; } = false;
+
         public InstructionRenderer(ProgramGrid grid)
         {
             m_grid = grid;
@@ -42,15 +44,27 @@ namespace Opus.UI.Rendering
                 var gridLocation = m_grid.GetCellLocation(position);
 
                 int keyTime = delay;
-                int clickTime = delay +  50;
+                int clickTime = delay + 50;
 
-                KeyDown(key);
-                MouseUtils.SetCursorPosition(gridLocation);
-                ThreadUtils.SleepOrAbort(keyTime);
-                MouseUtils.LeftClick(clickTime);
+                if (!QuickHotkeysEnabled)
+                {
+                    KeyDown(key);
+                    MouseUtils.SetCursorPosition(gridLocation);
+                    ThreadUtils.SleepOrAbort(keyTime);
+                    MouseUtils.LeftClick(clickTime);
 
-                KeyUp(key);
-                ThreadUtils.SleepOrAbort(keyTime);
+                    KeyUp(key);
+                    ThreadUtils.SleepOrAbort(keyTime);
+                }
+                else
+                {
+                    MouseUtils.SetCursorPosition(gridLocation);
+                    ThreadUtils.SleepOrAbort(keyTime);
+                    KeyDown(key);
+                    ThreadUtils.SleepOrAbort(keyTime);
+                    KeyUp(key);
+                    ThreadUtils.SleepOrAbort(keyTime);
+                }
             }
         }
     }
