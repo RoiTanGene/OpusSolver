@@ -172,8 +172,12 @@ namespace Opus.UI.Rendering
                     }
                 }
 
-                m_renderDelay += 10;
-                sm_log.Info("Increasing render delay to " + m_renderDelay);
+                if (retryCount > 1)
+                {
+                    // First retry did not work, increase render delay
+                    m_renderDelay += 10;
+                    sm_log.Info("Increasing render delay to " + m_renderDelay);
+                }
 
                 foreach (int timeIndex in errors)
                 {
